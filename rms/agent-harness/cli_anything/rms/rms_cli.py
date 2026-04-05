@@ -553,7 +553,7 @@ def remote_access_create(device_id, protocol, port):
     data = {"device_id": device_id}
     if protocol:
         data["protocol"] = protocol
-    if port:
+    if port is not None:
         data["port"] = port
     result = create_session(_get_token(), data)
     output(result, "Created remote access session")
@@ -989,7 +989,7 @@ def smtp_create(host, port, username, password, password_stdin):
             raise RuntimeError("No password provided on stdin")
     from cli_anything.rms.core.smtp import create_smtp_config
     data = {"host": host}
-    if port:
+    if port is not None:
         data["port"] = port
     if username:
         data["username"] = username
@@ -1018,7 +1018,7 @@ def smtp_update(config_id, host, port, username, password, password_stdin):
     data = {}
     if host:
         data["host"] = host
-    if port:
+    if port is not None:
         data["port"] = port
     if username:
         data["username"] = username
@@ -1038,6 +1038,680 @@ def smtp_delete(config_id):
     from cli_anything.rms.core.smtp import delete_smtp_config
     result = delete_smtp_config(_get_token(), config_id)
     output(result, f"Deleted SMTP config {config_id}")
+
+
+# ── Metrics ────────────────────────────────────────────────────────────
+
+
+GRAPH_TYPES = click.Choice(["dynamic", "io", "gps"])
+
+HISTORY_PARAMETERS = click.Choice([
+    "firmware", "sim_state", "pin_state", "sim_slot", "network_state",
+    "mobile_ip", "signal", "operator", "operator_number", "connection_state",
+    "connection_type", "temperature", "router_uptime", "connection_uptime",
+    "wan_state", "wan_ip", "cell_id", "mcc", "mnc", "lac", "iccid",
+    "rx_day", "rx_week", "rx_month", "tx_day", "tx_week", "tx_month",
+    "period", "sent", "received",
+])
+
+TAG_PARAMETERS = click.Choice([
+    "temperature", "signal", "sent", "received", "analog_input",
+    "satellites", "speed",
+])
+
+FLEET_CHARTS = click.Choice([
+    "model", "status", "signal", "firmware", "connection_type",
+    "wan_state", "network_state", "operator", "modem_manufacturer",
+    "modem_firmware", "modem_model",
+])
+
+
+@cli.group()
+def metrics():
+    """Device metrics, statistics, and historical data."""
+
+
+@metrics.command("graph")
+@click.argument("device_id")
+@click.option("--type", "info_type", type=GRAPH_TYPES, required=True, help="Data type")
+@click.option("--start", "start_date", required=True, help="Start date (Y-m-d H:i:s)")
+@click.option("--end", "end_date", required=True, help="End date (Y-m-d H:i:s)")
+@handle_error
+def metrics_graph(device_id, info_type, start_date, end_date):
+    """Get device graph data (dynamic/io/gps)."""
+    from cli_anything.rms.core.metrics import get_graph_data
+    result = get_graph_data(_get_token(), device_id, info_type, start_date, end_date)
+    output(result, f"Graph data ({info_type}) for device {device_id}")
+
+
+@metrics.command("history")
+@click.argument("device_id")
+@click.option("--datetime", "datetime_str", required=True, help="Snapshot datetime (Y-m-d H:i:s)")
+@handle_error
+def metrics_history(device_id, datetime_str):
+    """Get full device state at a specific moment."""
+    from cli_anything.rms.core.metrics import get_information_history
+    result = get_information_history(_get_token(), device_id, datetime_str)
+    output(result, f"History snapshot for device {device_id}")
+
+
+@metrics.command("history-param")
+@click.argument("device_id")
+@click.option("--datetime", "datetime_str", required=True, help="Snapshot datetime (Y-m-d H:i:s)")
+@click.option("--parameter", type=HISTORY_PARAMETERS, required=True, help="Parameter name")
+@handle_error
+def metrics_history_param(device_id, datetime_str, parameter):
+    """Get a single parameter from device history."""
+    from cli_anything.rms.core.metrics import get_information_history_parameter
+    result = get_information_history_parameter(_get_token(), device_id, datetime_str, parameter)
+    output(result, f"History parameter '{parameter}' for device {device_id}")
+
+
+@metrics.command("datetimes")
+@click.argument("device_id")
+@handle_error
+def metrics_datetimes(device_id):
+    """List available history datetimes for a device."""
+    from cli_anything.rms.core.metrics import get_available_datetimes
+    result = get_available_datetimes(_get_token(), device_id)
+    output(result, f"Available datetimes for device {device_id}")
+
+
+@metrics.command("data-usage")
+@click.argument("device_id")
+@click.option("--start", "start_date", required=True, help="Start date (Y-m-d H:i:s)")
+@click.option("--end", "end_date", required=True, help="End date (Y-m-d H:i:s)")
+@handle_error
+def metrics_data_usage(device_id, start_date, end_date):
+    """Get device data usage."""
+    from cli_anything.rms.core.metrics import get_data_usage
+    result = get_data_usage(_get_token(), device_id, start_date, end_date)
+    output(result, f"Data usage for device {device_id}")
+
+
+@metrics.command("tag-data")
+@click.argument("tag_id")
+@click.option("--parameter", type=TAG_PARAMETERS, required=True, help="Parameter name")
+@click.option("--start", "start_date", required=True, help="Start date (Y-m-d H:i:s)")
+@click.option("--end", "end_date", required=True, help="End date (Y-m-d H:i:s)")
+@handle_error
+def metrics_tag_data(tag_id, parameter, start_date, end_date):
+    """Get tag group data."""
+    from cli_anything.rms.core.metrics import get_tag_data
+    result = get_tag_data(_get_token(), tag_id, parameter, start_date, end_date)
+    output(result, f"Tag data for tag {tag_id}")
+
+
+@metrics.command("tag-group")
+@click.argument("tag_id")
+@click.option("--parameter", type=TAG_PARAMETERS, required=True, help="Parameter name")
+@click.option("--start", "start_date", required=True, help="Start date (Y-m-d H:i:s)")
+@click.option("--end", "end_date", required=True, help="End date (Y-m-d H:i:s)")
+@handle_error
+def metrics_tag_group(tag_id, parameter, start_date, end_date):
+    """Get tag group detailed data (min/max)."""
+    from cli_anything.rms.core.metrics import get_tag_group_data
+    result = get_tag_group_data(_get_token(), tag_id, parameter, start_date, end_date)
+    output(result, f"Tag group data for tag {tag_id}")
+
+
+@metrics.command("company-data")
+@click.argument("company_id")
+@click.option("--parameter", type=TAG_PARAMETERS, required=True, help="Parameter name")
+@click.option("--start", "start_date", required=True, help="Start date (Y-m-d H:i:s)")
+@click.option("--end", "end_date", required=True, help="End date (Y-m-d H:i:s)")
+@handle_error
+def metrics_company_data(company_id, parameter, start_date, end_date):
+    """Get company group data."""
+    from cli_anything.rms.core.metrics import get_company_data
+    result = get_company_data(_get_token(), company_id, parameter, start_date, end_date)
+    output(result, f"Company data for company {company_id}")
+
+
+@metrics.command("company-group")
+@click.argument("company_id")
+@click.option("--parameter", type=TAG_PARAMETERS, required=True, help="Parameter name")
+@click.option("--start", "start_date", required=True, help="Start date (Y-m-d H:i:s)")
+@click.option("--end", "end_date", required=True, help="End date (Y-m-d H:i:s)")
+@handle_error
+def metrics_company_group(company_id, parameter, start_date, end_date):
+    """Get company group detailed data (min/max)."""
+    from cli_anything.rms.core.metrics import get_company_group_data
+    result = get_company_group_data(_get_token(), company_id, parameter, start_date, end_date)
+    output(result, f"Company group data for company {company_id}")
+
+
+@metrics.command("statistics")
+@click.option("--charts", required=True, help="Comma-separated chart types (model,status,signal,...)")
+@click.option("--model", default=None)
+@click.option("--firmware", default=None)
+@click.option("--status", default=None)
+@click.option("--connection-type", "connection_type", default=None)
+@click.option("--signal", "signal_filter", default=None)
+@click.option("--wan-state", "wan_state", default=None)
+@click.option("--network-state", "network_state", default=None)
+@click.option("--operator", default=None)
+@handle_error
+def metrics_statistics(charts, model, firmware, status, connection_type,
+                       signal_filter, wan_state, network_state, operator):
+    """Get fleet statistics."""
+    from cli_anything.rms.core.metrics import get_fleet_statistics
+    result = get_fleet_statistics(
+        _get_token(), charts,
+        model=model, firmware=firmware, status=status,
+        connection_type=connection_type, signal=signal_filter,
+        wan_state=wan_state, network_state=network_state, operator=operator,
+    )
+    output(result, "Fleet statistics")
+
+
+@metrics.command("online")
+@click.option("--company-id", required=True, type=int, help="Company ID")
+@click.option("--start", "start_date", required=True, help="Start date (Y-m-d H:i:s)")
+@click.option("--end", "end_date", required=True, help="End date (Y-m-d H:i:s)")
+@click.option("--include-children", is_flag=True, help="Include child companies")
+@handle_error
+def metrics_online(company_id, start_date, end_date, include_children):
+    """Get online device statistics."""
+    from cli_anything.rms.core.metrics import get_online_statistics
+    result = get_online_statistics(
+        _get_token(), company_id, start_date, end_date,
+        include_children=include_children,
+    )
+    output(result, "Online device statistics")
+
+
+# ── Data Collect ───────────────────────────────────────────────────────
+
+
+@cli.group("data-collect")
+def data_collect():
+    """Data collection configuration and custom device data."""
+
+
+@data_collect.group("configs")
+def dc_configs():
+    """Data collection configurations."""
+
+
+@dc_configs.command("list")
+@click.option("--limit", type=int, default=25)
+@click.option("--offset", type=int, default=0)
+@handle_error
+def dc_configs_list(limit, offset):
+    """List data collection configs."""
+    from cli_anything.rms.core.data_collect import list_configs
+    result = list_configs(_get_token(), limit=limit, offset=offset)
+    output(result, "Data collection configs")
+
+
+@dc_configs.command("get")
+@click.argument("config_id")
+@handle_error
+def dc_configs_get(config_id):
+    """Get data collection config."""
+    from cli_anything.rms.core.data_collect import get_config
+    result = get_config(_get_token(), config_id)
+    output(result, f"Data collection config {config_id}")
+
+
+@dc_configs.command("assigned")
+@click.option("--device-id", type=int, default=None, help="Filter by device ID")
+@click.option("--config-id", type=int, default=None, help="Filter by config ID")
+@handle_error
+def dc_configs_assigned(device_id, config_id):
+    """List assigned data collection configs."""
+    from cli_anything.rms.core.data_collect import list_assigned_configs
+    result = list_assigned_configs(_get_token(), device_id=device_id, config_id=config_id)
+    output(result, "Assigned data collection configs")
+
+
+@dc_configs.command("logs")
+@click.option("--limit", type=int, default=25)
+@click.option("--offset", type=int, default=0)
+@handle_error
+def dc_configs_logs(limit, offset):
+    """List data collection config logs."""
+    from cli_anything.rms.core.data_collect import list_config_logs
+    result = list_config_logs(_get_token(), limit=limit, offset=offset)
+    output(result, "Data collection config logs")
+
+
+@data_collect.command("data")
+@click.argument("device_id")
+@click.option("--start", "start_date", required=True, help="Start date (Y-m-d H:i:s)")
+@click.option("--end", "end_date", required=True, help="End date (Y-m-d H:i:s)")
+@click.option("--config-id", type=int, default=None, help="Filter by config ID")
+@handle_error
+def dc_data(device_id, start_date, end_date, config_id):
+    """Get device custom data."""
+    from cli_anything.rms.core.data_collect import get_custom_data
+    result = get_custom_data(_get_token(), device_id, start_date, end_date, config_id=config_id)
+    output(result, f"Custom data for device {device_id}")
+
+
+@data_collect.command("graph")
+@click.option("--field", required=True, help="Field spec: config_id:/api/path:param_name")
+@handle_error
+def dc_graph(field):
+    """Get data collection graph data."""
+    from cli_anything.rms.core.data_collect import get_graph_data
+    result = get_graph_data(_get_token(), field)
+    output(result, "Data collection graph")
+
+
+@data_collect.command("values")
+@click.option("--field", required=True, help="Field spec: config_id:/api/path:param_name")
+@handle_error
+def dc_values(field):
+    """Get available values for a data collection field."""
+    from cli_anything.rms.core.data_collect import get_available_values
+    result = get_available_values(_get_token(), field)
+    output(result, "Available values")
+
+
+@data_collect.command("fields")
+@handle_error
+def dc_fields():
+    """List monitoring template fields."""
+    from cli_anything.rms.core.data_collect import list_fields
+    result = list_fields(_get_token())
+    output(result, "Monitoring fields")
+
+
+# ── Tasks ──────────────────────────────────────────────────────────────
+
+
+@cli.group()
+def tasks():
+    """Device tasks, firmware updates, and actions."""
+
+
+@tasks.command("list")
+@click.option("--limit", type=int, default=25)
+@click.option("--offset", type=int, default=0)
+@handle_error
+def tasks_list(limit, offset):
+    """List device tasks."""
+    from cli_anything.rms.core.tasks import list_tasks
+    result = list_tasks(_get_token(), limit=limit, offset=offset)
+    output(result, "Device tasks")
+
+
+@tasks.command("get")
+@click.argument("task_id")
+@handle_error
+def tasks_get(task_id):
+    """Get a specific task."""
+    from cli_anything.rms.core.tasks import get_task
+    result = get_task(_get_token(), task_id)
+    output(result, f"Task {task_id}")
+
+
+@tasks.command("logs")
+@click.option("--limit", type=int, default=25)
+@click.option("--offset", type=int, default=0)
+@handle_error
+def tasks_logs(limit, offset):
+    """List task logs."""
+    from cli_anything.rms.core.tasks import list_task_logs
+    result = list_task_logs(_get_token(), limit=limit, offset=offset)
+    output(result, "Task logs")
+
+
+@tasks.command("log")
+@click.argument("log_id")
+@handle_error
+def tasks_log(log_id):
+    """Get a specific task log."""
+    from cli_anything.rms.core.tasks import get_task_log
+    result = get_task_log(_get_token(), log_id)
+    output(result, f"Task log {log_id}")
+
+
+@tasks.group("groups")
+def task_groups():
+    """Task groups."""
+
+
+@task_groups.command("list")
+@click.option("--limit", type=int, default=25)
+@click.option("--offset", type=int, default=0)
+@handle_error
+def task_groups_list(limit, offset):
+    """List task groups."""
+    from cli_anything.rms.core.tasks import list_task_groups
+    result = list_task_groups(_get_token(), limit=limit, offset=offset)
+    output(result, "Task groups")
+
+
+@task_groups.command("get")
+@click.argument("group_id")
+@handle_error
+def task_groups_get(group_id):
+    """Get a specific task group."""
+    from cli_anything.rms.core.tasks import get_task_group
+    result = get_task_group(_get_token(), group_id)
+    output(result, f"Task group {group_id}")
+
+
+@task_groups.command("logs")
+@click.option("--limit", type=int, default=25)
+@handle_error
+def task_groups_logs(limit):
+    """List task group logs."""
+    from cli_anything.rms.core.tasks import list_task_group_logs
+    result = list_task_group_logs(_get_token(), limit=limit)
+    output(result, "Task group logs")
+
+
+@tasks.command("updates-pending")
+@click.option("--limit", type=int, default=25)
+@handle_error
+def tasks_updates_pending(limit):
+    """List pending firmware updates."""
+    from cli_anything.rms.core.tasks import list_updates_pending
+    result = list_updates_pending(_get_token(), limit=limit)
+    output(result, "Pending firmware updates")
+
+
+@tasks.command("updates-set")
+@click.option("--data", required=True, help="JSON payload")
+@handle_error
+def tasks_updates_set(data):
+    """Schedule firmware updates."""
+    from cli_anything.rms.core.tasks import set_updates
+    result = set_updates(_get_token(), json.loads(data))
+    output(result, "Firmware updates scheduled")
+
+
+@tasks.command("updates-cancel")
+@click.option("--data", required=True, help="JSON payload")
+@handle_error
+def tasks_updates_cancel(data):
+    """Cancel firmware updates."""
+    from cli_anything.rms.core.tasks import cancel_updates
+    result = cancel_updates(_get_token(), json.loads(data))
+    output(result, "Firmware updates cancelled")
+
+
+@tasks.command("actions-execute")
+@click.option("--data", required=True, help="JSON payload")
+@click.option("--confirm", is_flag=True, required=True, help="Confirm execution (required)")
+@handle_error
+def tasks_actions_execute(data, confirm):
+    """Execute a device action. Requires --confirm flag."""
+    from cli_anything.rms.core.tasks import execute_action
+    result = execute_action(_get_token(), json.loads(data))
+    output(result, "Action executed")
+
+
+@tasks.command("actions-cancel")
+@click.option("--data", required=True, help="JSON payload")
+@click.option("--confirm", is_flag=True, required=True, help="Confirm cancellation (required)")
+@handle_error
+def tasks_actions_cancel(data, confirm):
+    """Cancel device actions. Requires --confirm flag."""
+    from cli_anything.rms.core.tasks import cancel_actions
+    result = cancel_actions(_get_token(), json.loads(data))
+    output(result, "Actions cancelled")
+
+
+@tasks.command("actions-logs")
+@click.option("--device-id", type=int, default=None, help="Filter by device ID")
+@click.option("--tag-id", type=int, default=None, help="Filter by tag ID")
+@handle_error
+def tasks_actions_logs(device_id, tag_id):
+    """Get device action logs. Requires --device-id or --tag-id."""
+    from cli_anything.rms.core.tasks import list_action_logs
+    result = list_action_logs(_get_token(), device_id=device_id, tag_id=tag_id)
+    output(result, "Action logs")
+
+
+# ── Commands ──────────────────────────────────────────────────────────
+
+
+@cli.group()
+def commands():
+    """Execute remote device commands."""
+
+
+@commands.command("execute")
+@click.argument("device_id")
+@click.option("--command", "command_json", required=True, help="Command JSON payload")
+@click.option("--confirm", is_flag=True, required=True, help="Confirm execution (required)")
+@handle_error
+def commands_execute(device_id, command_json, confirm):
+    """Execute a remote command on a device. Requires --confirm flag."""
+    from cli_anything.rms.core.commands import execute_command
+    result = execute_command(_get_token(), device_id, json.loads(command_json))
+    output(result, f"Command sent to device {device_id}")
+
+
+# ── VPN ───────────────────────────────────────────────────────────────
+
+
+@cli.group()
+def vpn():
+    """VPN hub management."""
+
+
+@vpn.command("list")
+@click.option("--company-id", type=int, default=None)
+@click.option("--enabled", type=int, default=None, help="1=enabled, 0=disabled")
+@click.option("--limit", type=int, default=25)
+@click.option("--offset", type=int, default=0)
+@click.option("--search", "q", type=str, default=None)
+@handle_error
+def vpn_list(company_id, enabled, limit, offset, q):
+    """List VPN hubs."""
+    from cli_anything.rms.core.vpn import list_hubs
+    result = list_hubs(_get_token(), company_id=company_id, enabled=enabled,
+                       limit=limit, offset=offset, q=q)
+    output(result, "VPN hubs")
+
+
+@vpn.command("get")
+@click.argument("hub_id")
+@handle_error
+def vpn_get(hub_id):
+    """Get VPN hub info."""
+    from cli_anything.rms.core.vpn import get_hub_info
+    result = get_hub_info(_get_token(), hub_id)
+    output(result, f"VPN hub {hub_id}")
+
+
+@vpn.command("sessions")
+@click.argument("hub_id")
+@handle_error
+def vpn_sessions(hub_id):
+    """Get VPN hub sessions."""
+    from cli_anything.rms.core.vpn import list_hub_sessions
+    result = list_hub_sessions(_get_token(), hub_id)
+    output(result, f"VPN hub {hub_id} sessions")
+
+
+@vpn.command("device-status")
+@click.option("--device-id", type=int, default=None)
+@handle_error
+def vpn_device_status(device_id):
+    """Get device L2TP VPN status."""
+    from cli_anything.rms.core.vpn import get_device_vpn_status
+    result = get_device_vpn_status(_get_token(), device_id=device_id)
+    output(result, "Device VPN status")
+
+
+@vpn.command("logs")
+@click.argument("hub_id")
+@click.option("--start", "start_date", type=str, required=True, help="Start date (Y-m-d H:i:s)")
+@click.option("--end", "end_date", type=str, required=True, help="End date (Y-m-d H:i:s)")
+@handle_error
+def vpn_logs(hub_id, start_date, end_date):
+    """Get VPN hub logs."""
+    from cli_anything.rms.core.vpn import list_hub_logs
+    result = list_hub_logs(_get_token(), hub_id, start_date, end_date)
+    output(result, f"VPN hub {hub_id} logs")
+
+
+# ── Wireless ──────────────────────────────────────────────────────────
+
+
+@cli.group()
+def wireless():
+    """Wireless access point management."""
+
+
+@wireless.command("list")
+@click.option("--wireless-id", type=int, required=True, help="Wireless ID filter")
+@click.option("--limit", type=int, default=25)
+@click.option("--offset", type=int, default=0)
+@click.option("--search", "q", type=str, default=None)
+@handle_error
+def wireless_list(wireless_id, limit, offset, q):
+    """List monitored wireless devices."""
+    from cli_anything.rms.core.wireless import list_wireless
+    result = list_wireless(_get_token(), wireless_id, limit=limit, offset=offset, q=q)
+    output(result, "Wireless devices")
+
+
+@wireless.command("get")
+@click.argument("device_id")
+@handle_error
+def wireless_get(device_id):
+    """Get device wireless AP info."""
+    from cli_anything.rms.core.wireless import get_device_wireless
+    result = get_device_wireless(_get_token(), device_id)
+    output(result, f"Wireless info for device {device_id}")
+
+
+@wireless.command("graph")
+@click.argument("device_id")
+@click.option("--wlan", type=str, required=True, help="Comma-separated WLAN IDs")
+@click.option("--start", "start_date", type=str, required=True, help="Start date (Y-m-d H:i:s)")
+@click.option("--end", "end_date", type=str, required=True, help="End date (Y-m-d H:i:s)")
+@handle_error
+def wireless_graph(device_id, wlan, start_date, end_date):
+    """Get wireless AP graph data."""
+    from cli_anything.rms.core.wireless import get_wireless_graph
+    result = get_wireless_graph(_get_token(), device_id, wlan, start_date, end_date)
+    output(result, f"Wireless graph for device {device_id}")
+
+
+# ── Automations ───────────────────────────────────────────────────────
+
+
+@cli.group()
+def automations():
+    """Automation management."""
+
+
+@automations.command("list")
+@click.option("--company-id", type=int, default=None)
+@click.option("--limit", type=int, default=25)
+@click.option("--offset", type=int, default=0)
+@click.option("--sort", type=str, default=None, help="Sort field (prefix - for desc)")
+@click.option("--search", "q", type=str, default=None)
+@handle_error
+def automations_list(company_id, limit, offset, sort, q):
+    """List automations."""
+    from cli_anything.rms.core.automations import list_automations
+    result = list_automations(_get_token(), company_id=company_id,
+                              limit=limit, offset=offset, sort=sort, q=q)
+    output(result, "Automations")
+
+
+@automations.command("get")
+@click.argument("automation_id")
+@handle_error
+def automations_get(automation_id):
+    """Get automation details."""
+    from cli_anything.rms.core.automations import get_automation
+    result = get_automation(_get_token(), automation_id)
+    output(result, f"Automation {automation_id}")
+
+
+@automations.command("device")
+@click.argument("device_id")
+@click.option("--limit", type=int, default=25)
+@click.option("--offset", type=int, default=0)
+@click.option("--sort", type=str, default=None)
+@handle_error
+def automations_device(device_id, limit, offset, sort):
+    """Get automations assigned to a device."""
+    from cli_anything.rms.core.automations import get_device_automations
+    result = get_device_automations(_get_token(), device_id, limit=limit, offset=offset, sort=sort)
+    output(result, f"Automations for device {device_id}")
+
+
+@automations.command("logs")
+@click.argument("automation_id")
+@click.option("--start", "start_date", type=str, default=None, help="Start date (Y-m-d H:i:s)")
+@click.option("--end", "end_date", type=str, default=None, help="End date (Y-m-d H:i:s)")
+@handle_error
+def automations_logs(automation_id, start_date, end_date):
+    """Get automation logs."""
+    from cli_anything.rms.core.automations import list_automation_logs
+    result = list_automation_logs(_get_token(), automation_id,
+                                  start_date=start_date, end_date=end_date)
+    output(result, f"Automation {automation_id} logs")
+
+
+# ── Configurator ──────────────────────────────────────────────────────
+
+
+@cli.group()
+def configurator():
+    """Device multi-configuration management."""
+
+
+@configurator.command("spec")
+@click.option("--device-id", type=str, required=True, help="Comma-separated device IDs")
+@handle_error
+def configurator_spec(device_id):
+    """Get available configuration parameters for devices."""
+    from cli_anything.rms.core.configurator import get_specification
+    result = get_specification(_get_token(), device_id)
+    output(result, "Configuration specification")
+
+
+@configurator.command("config")
+@click.option("--data", "data_json", type=str, required=True, help="JSON body with devices and parameters")
+@handle_error
+def configurator_config(data_json):
+    """Get device configuration values (POST)."""
+    from cli_anything.rms.core.configurator import get_configuration
+    result = get_configuration(_get_token(), json.loads(data_json))
+    output(result, "Device configuration values")
+
+
+@configurator.command("templates")
+@handle_error
+def configurator_templates():
+    """List multi-configuration templates."""
+    from cli_anything.rms.core.configurator import list_templates
+    result = list_templates(_get_token())
+    output(result, "Configuration templates")
+
+
+@configurator.command("logs")
+@click.argument("device_id")
+@handle_error
+def configurator_logs(device_id):
+    """Get device configuration logs."""
+    from cli_anything.rms.core.configurator import list_device_logs
+    result = list_device_logs(_get_token(), device_id)
+    output(result, f"Configuration logs for device {device_id}")
+
+
+@configurator.command("log")
+@click.argument("device_id")
+@click.argument("action_name")
+@handle_error
+def configurator_log(device_id, action_name):
+    """Get a specific configuration log entry."""
+    from cli_anything.rms.core.configurator import get_device_log
+    result = get_device_log(_get_token(), device_id, action_name)
+    output(result, f"Configuration log {action_name} for device {device_id}")
 
 
 # ── Auth ───────────────────────────────────────────────────────────────
@@ -1201,6 +1875,27 @@ def repl():
         "reports list": "List reports",
         "hotspots list": "List hotspots",
         "passwords get <device-id>": "Get device password",
+        "metrics graph <id> --type T --start D --end D": "Get device graph data",
+        "metrics history <id> --datetime D": "Get device state snapshot",
+        "metrics datetimes <id>": "List available history datetimes",
+        "metrics data-usage <id> --start D --end D": "Get device data usage",
+        "metrics statistics --charts C": "Get fleet statistics",
+        "metrics online --company-id N --start D --end D": "Online device stats",
+        "data-collect configs list": "List data collection configs",
+        "data-collect data <id> --start D --end D": "Get device custom data",
+        "tasks list [--limit N]": "List device tasks",
+        "tasks get <id>": "Get task details",
+        "commands execute <id> --command JSON --confirm": "Execute remote command",
+        "vpn list": "List VPN hubs",
+        "vpn get <hub-id>": "Get VPN hub info",
+        "vpn sessions <hub-id>": "List VPN sessions",
+        "vpn device-status [--device-id N]": "Get device VPN status",
+        "wireless list --wireless-id N": "List wireless APs",
+        "wireless get <device-id>": "Get device wireless info",
+        "automations list": "List automations",
+        "automations device <device-id>": "Get device automations",
+        "configurator spec": "Get configurator specification",
+        "configurator templates": "List configurator templates",
         "smtp list": "List SMTP configs",
         "auth test": "Test API connectivity",
         "config set <key> <val>": "Set configuration",
